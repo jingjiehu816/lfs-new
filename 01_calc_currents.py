@@ -58,8 +58,9 @@ def process_single_case(case_dir):
 
             ln2, lt2 = np.meshgrid(lon, lat)
             ln_n, w2 = np.mod(ln2, 360), np.cos(np.radians(lt2))
-            # 🎯 适配新区域
-            reg_masks = {v['short_name']: (ln_n >= v['lon'][0]) & (ln_n <= v['lon'][1]) & (lt2 >= v['lat'][0]) & (lt2 <= v['lat'][2]) for k, v in REGIONS.items()}
+            
+            # 🎯 修复：统一使用 v['lat'][1] 和正确的逻辑符 <=
+            reg_masks = {v['short_name']: (ln_n >= v['lon'][0]) & (ln_n <= v['lon'][1]) & (lt2 >= v['lat'][0]) & (lt2 <= v['lat'][1]) for k, v in REGIONS.items()}
 
             with xr.open_dataset(uu_f, decode_times=False) as ds_u, xr.open_dataset(vv_f, decode_times=False) as ds_v:
                 m_u = ds_u['uu'].isel(time=0, lev=SURFACE_IDX).interp(lat=lat, lon=lon).values
@@ -100,7 +101,6 @@ def main():
 
     if not final: return
     df = pd.DataFrame(final).sort_values(['case_date', 'forecast_day'])
-    # 🎯 统一存入 data 文件夹
     out = os.path.join(DATA_OUT_DIR, f"Currents_Stats_Full_{START_DATE}-{END_DATE}.csv")
     df.to_csv(out, index=False)
 

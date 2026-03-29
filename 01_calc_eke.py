@@ -24,6 +24,7 @@ def init_worker(clim_dict, grid_dict):
     global_clim, global_grid = clim_dict, grid_dict
 
 def get_region_mask(lon_2d, lat_2d, bounds):
+    # 使用统一的 [min, max] 索引
     return (lon_2d >= bounds['lon'][0]) & (lon_2d <= bounds['lon'][1]) & \
            (lat_2d >= bounds['lat'][0]) & (lat_2d <= bounds['lat'][1])
 
@@ -36,12 +37,12 @@ def process_single_case(case_dir):
         case_date = datetime.strptime(os.path.basename(case_dir).split('_')[1], '%Y%m%d')
     except: return None
 
-    # 🎯 全新标准四季划分
+    # 标准四季划分
     month = case_date.month
     if month in [3, 4, 5]: season = 'Spring'
     elif month in [6, 7, 8]: season = 'Summer'
     elif month in [9, 10, 11]: season = 'Autumn'
-    else: season = 'Winter' # 12, 1, 2
+    else: season = 'Winter'
 
     results_1d = []
     grid_shape = global_grid['shape']
@@ -80,20 +81,19 @@ def process_single_case(case_dir):
             sum_mod[m_val]  += mod_eke[m_val]
             valid_cnt[m_val] += 1
 
-            # 🎯 写入带 forecast_day 的记录，匹配 03 趋势图脚本的需求
             rec = {'season': season, 'case_date': case_date.strftime('%Y%m%d'), 'forecast_day': day_idx}
             for reg_name, reg_mask in global_grid['masks'].items():
                 m = m_val & reg_mask
                 if np.sum(m) > 0:
                     rec[f'{reg_name}_obs_eke'] = np.nanmean(obs_eke[m])
                     rec[f'{reg_name}_mod_eke'] = np.nanmean(mod_eke[m])
-                    rec[f'{reg_name}_Bias']    = np.nanmean(bias_2d[m]) # 首字母大写统一
+                    rec[f'{reg_name}_Bias']    = np.nanmean(bias_2d[m])
                     rec[f'{reg_name}_RMSE']    = np.sqrt(np.nanmean(bias_2d[m]**2))
                     rec[f'{reg_name}_MAE']     = np.nanmean(np.abs(bias_2d[m]))
                 else:
                     rec[f'{reg_name}_obs_eke'] = np.nan
             results_1d.append(rec)
-        except Exception: continue
+        except: continue
             
     if results_1d:
         with np.errstate(invalid='ignore'):
@@ -104,6 +104,7 @@ def process_single_case(case_dir):
                 'mod_eke':   (['lat', 'lon'], sum_mod / valid_cnt),
                 'count':     (['lat', 'lon'], valid_cnt)
             }, coords={'lat': global_grid['lat'], 'lon': global_grid['lon']})
+            # 临时保存单个 case 的空间场
             ds_out.to_netcdf(os.path.join(TMP_NC_PATH, f"eke_2d_{case_date.strftime('%Y%m%d')}_{season}.nc"))
 
     return results_1d
@@ -122,38 +123,65 @@ def main():
 
     all_cases = sorted(glob.glob(os.path.join(MOD_BASE_PATH, "case_*_10km")))
     target_cases = [c for c in all_cases if START_DATE <= os.path.basename(c).split('_')[1] <= END_DATE]
-
     if not target_cases: return
+
+    seasons = ['Spring', 'Summer', 'Autumn', 'Winter']
+    # 建立主进程累加器，避免最后使用 mfdataset
+    accumulators = {s: {
+        'mean_bias': np.zeros(grid_dict['shape']),
+        'rmse_sq': np.zeros(grid_dict['shape']),
+        'obs_eke': np.zeros(grid_dict['shape']),
+        'mod_eke': np.zeros(grid_dict['shape']),
+        'count': np.zeros(grid_dict['shape'])
+    } for s in seasons}
 
     final_1d = []
     total = len(target_cases)
     with mp.Pool(CPU_NUM, initializer=init_worker, initargs=(clim_dict, grid_dict)) as pool:
         for i, res in enumerate(pool.imap_unordered(process_single_case, target_cases)):
-            if res: final_1d.extend(res)
+            if res: 
+                final_1d.extend(res)
+                # 实时读取生成的临时 NC 并累加，然后立即删除
+                tmp_files = glob.glob(os.path.join(TMP_NC_PATH, "*.nc"))
+                for f in tmp_files:
+                    s_name = f.split('_')[-1].replace('.nc', '')
+                    with xr.open_dataset(f) as ds_tmp:
+                        cnt = ds_tmp['count'].values
+                        accumulators[s_name]['mean_bias'] += ds_tmp['mean_bias'].values * cnt
+                        accumulators[s_name]['rmse_sq'] += (ds_tmp['rmse'].values**2) * cnt
+                        accumulators[s_name]['obs_eke'] += ds_tmp['obs_eke'].values * cnt
+                        accumulators[s_name]['mod_eke'] += ds_tmp['mod_eke'].values * cnt
+                        accumulators[s_name]['count'] += cnt
+                    os.remove(f)
+
             if (i + 1) % max(int(total / 10), 1) == 0 or (i + 1) == total:
                 print(f"    -> EKE 进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)", flush=True)
 
+    # 1. 保存 1D 统计 CSV
     df = pd.DataFrame(final_1d).dropna(subset=['case_date'])
-    
-    # 🎯 核心修复 1：输出总表供 03 趋势脚本画图用
     df.to_csv(os.path.join(DATA_OUT_DIR, 'EKE_Evaluation_20230101-20241231.csv'), index=False)
 
-    # 🎯 核心修复 2：输出 4 个季节的 CSV 供 02 表格脚本画表用
-    seasons = ['Spring', 'Summer', 'Autumn', 'Winter']
-    for season in seasons:
-        df_season = df[df['season'] == season]
-        if not df_season.empty:
-            df_season.to_csv(os.path.join(DATA_OUT_DIR, f'EKE_TimeSeries_{season}.csv'), index=False)
+    # 2. 输出 4 个季节的 CSV 供绘图
+    for s in seasons:
+        df_s = df[df['season'] == s]
+        if not df_s.empty:
+            df_s.to_csv(os.path.join(DATA_OUT_DIR, f'EKE_TimeSeries_{s}.csv'), index=False)
 
-    # 🎯 核心修复 3：合成 4 个季节的空间场 NC 供 04 空间图脚本画图用
-    for season in seasons:
-        nc_files = glob.glob(os.path.join(TMP_NC_PATH, f"eke_2d_*_{season}.nc"))
-        if not nc_files: continue
-        ds_all = xr.open_mfdataset(nc_files, combine='nested', concat_dim='case')
-        tot_cnt = ds_all['count'].sum(dim='case')
-        ds_mean = (ds_all[['mean_bias', 'rmse', 'obs_eke', 'mod_eke']] * ds_all['count']).sum(dim='case') / tot_cnt
-        ds_mean.to_netcdf(os.path.join(DATA_OUT_DIR, f'Spatial_EKE_Map_{season}.nc'))
+    # 3. 输出季节空间场 NC
+    print("    -> 正在输出季节空间分布图...", flush=True)
+    for s in seasons:
+        acc = accumulators[s]
+        valid = acc['count'] > 0
+        ds_final = xr.Dataset({
+            'mean_bias': (['lat', 'lon'], np.where(valid, acc['mean_bias'] / acc['count'], np.nan)),
+            'rmse':      (['lat', 'lon'], np.where(valid, np.sqrt(acc['rmse_sq'] / acc['count']), np.nan)),
+            'obs_eke':   (['lat', 'lon'], np.where(valid, acc['obs_eke'] / acc['count'], np.nan)),
+            'mod_eke':   (['lat', 'lon'], np.where(valid, acc['mod_eke'] / acc['count'], np.nan)),
+            'count':     (['lat', 'lon'], acc['count'])
+        }, coords={'lat': lat_arr, 'lon': lon_arr})
+        ds_final.to_netcdf(os.path.join(DATA_OUT_DIR, f'Spatial_EKE_Map_{s}.nc'))
 
-    os.system(f"rm -rf {TMP_NC_PATH}")
+    if os.path.exists(TMP_NC_PATH): os.rmdir(TMP_NC_PATH)
+    print("✅ EKE 计算与空间场输出全部完成!")
 
 if __name__ == "__main__": main()

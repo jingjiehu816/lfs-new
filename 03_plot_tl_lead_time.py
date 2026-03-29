@@ -28,7 +28,6 @@ def get_stats():
         df_d = df[df[day_col] == d]
         res = {}
         for v in VARS.keys():
-            # 这里自动兼容原表，如果有 MAE 就画，没有就跳过
             for m in ['Bias', 'RMSE', 'MAE']: 
                 if f'{v}_{m}' in df_d.columns:
                     res[f'{v}_{m}'] = calc_bxp(df_d[f'{v}_{m}'])
@@ -39,11 +38,11 @@ def main():
     stats = get_stats()
     if not stats: return
     
-    # 修复 matplotlib 报错，并缩小横向间距
-    fig, axes = plt.subplots(2, 3, figsize=(22, 10), gridspec_kw={'hspace': 0.1, 'wspace': 0.15})
+    # 使用 gridspec_kw 调整间距，设置 top 留出图例空间
+    fig, axes = plt.subplots(2, 3, figsize=(22, 10), gridspec_kw={'hspace': 0.12, 'wspace': 0.15, 'top': 0.90})
     
     for i, (v_k, v_i) in enumerate(VARS.items()):
-        # Top: Bias/RMSE
+        # Top: Bias/RMSE | Bottom: MAE
         b_box, r_box, m_box = [], [], []
         for d, s in enumerate(stats):
             if s and f'{v_k}_Bias' in s and s[f'{v_k}_Bias']:
@@ -55,20 +54,22 @@ def main():
                 m['label'] = d+1
                 m_box.append(m)
                 
+        # 绘制上图
         axes[0,i].bxp(b_box, positions=np.arange(1,31), patch_artist=True, showfliers=False, widths=0.35, boxprops={'facecolor':'lightblue'}, medianprops={'color':'red'})
         axes[0,i].bxp(r_box, positions=np.arange(1,31)+0.4, patch_artist=True, showfliers=False, widths=0.35, boxprops={'facecolor':'lightgreen'}, medianprops={'color':'black'})
         axes[0,i].set_title(v_i['title'], weight='bold', size=15)
         
-        # Bottom: MAE
+        # 绘制下图
         if m_box:
             axes[1,i].bxp(m_box, positions=np.arange(1,31)+0.2, patch_artist=True, showfliers=False, widths=0.4, boxprops={'facecolor':'moccasin'}, medianprops={'color':'darkorange'})
         
         for ax_idx, ax in enumerate([axes[0,i], axes[1,i]]):
             ax.set_xlim(0, 32); ax.set_xticks([1.2, 7.2, 15.2, 30.2])
             ax.grid(axis='y', ls=':', alpha=0.5)
-            ax.axhline(0, color='k', ls='--', alpha=0.5)
-            # 隐藏上图横坐标，只保留下图横坐标
+            
+            # 🎯 修复：MAE 不画 y=0 的线，仅上图画
             if ax_idx == 0:
+                ax.axhline(0, color='k', ls='--', alpha=0.5)
                 ax.set_xticklabels([])
                 ax.tick_params(axis='x', length=0)
             else:
@@ -77,11 +78,14 @@ def main():
     axes[0,0].set_ylabel('Bias & RMSE (m)', weight='bold')
     axes[1,0].set_ylabel('MAE (m)', weight='bold')
     
+    # 🎯 修复：调整图例位置 (bbox_to_anchor) 防止重叠
     leg = [Line2D([0],[0], color='red', marker='s', markerfacecolor='lightblue', label='Bias'),
            Line2D([0],[0], color='black', marker='s', markerfacecolor='lightgreen', label='RMSE'),
            Line2D([0],[0], color='darkorange', marker='s', markerfacecolor='moccasin', label='MAE')]
-    fig.legend(handles=leg, loc='upper center', bbox_to_anchor=(0.5, 0.94), ncol=3, fontsize=12)
+    fig.legend(handles=leg, loc='upper center', bbox_to_anchor=(0.5, 0.97), ncol=3, fontsize=12, frameon=False)
     
-    plt.savefig(os.path.join(PLOT_OUT_DIR, 'Boxplot_Thermocline_LeadTime.png'), dpi=300, bbox_inches='tight')
+    save_path = os.path.join(PLOT_OUT_DIR, 'Boxplot_Thermocline_LeadTime.png')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"✅ 温跃层时效箱线图已更新并覆盖: {save_path}")
 
 if __name__ == '__main__': main()

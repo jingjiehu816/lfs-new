@@ -5,17 +5,17 @@ from config_regions import DATA_OUT_DIR, PLOT_OUT_DIR
 
 # ================= 🎯 运行控制中心 =================
 # 0: 区域定义图 | 1: 并行计算数据 | 2: 统计表格 | 3: 时效趋势图 | 4: 空间分布图
-ACTIVE_STAGES = [1,2,3,4] 
+ACTIVE_STAGES = [0,1,2,3,4] 
 
 # 各阶段对应的脚本列表
-"""
+
 SCRIPTS = {
     0: ["00_plot_study_regions.py"],
     1: ["01_calc_currents.py", "01_calc_eke.py", "01_calc_mld_stats.py", 
-        "01_calc_sss.py", "01_calc_sst.py", "01_calc_ts_profile.py"],
+        "01_calc_sss.py", "01_calc_sst.py", "01_calc_ts_profile.py","01_calc_tl.py"],
     2: ["02_plot_currents_table.py", "02_plot_eke_table.py", "02_plot_mld_table.py", 
         "02_plot_sss_table.py", "02_plot_sst_table.py", "02_plot_tl_table.py", "02_plot_ts_profile_table.py"],
-    3: ["03_plot_eke_lead_time.py", "03_plot_sst_lead_time.py","03_plot_sss_lead_time.py", "03_plot_tl_lead_time.py"],
+    3: ["03_plot_eke_lead_time.py", "03_plot_sst_lead_time.py","03_plot_sss_lead_time.py", "03_plot_tl_lead_time.py","03_plot_mld_lead_time.py","03_plot_ts_profile_lead_time.py"],
     4: ["04_plot_eke_spatial.py"]
 }
 """
@@ -26,6 +26,7 @@ SCRIPTS = {
     3: ["03_plot_eke_lead_time.py", "03_plot_sst_lead_time.py", "03_plot_tl_lead_time.py","03_plot_sss_lead_time.py"],
     4: ["04_plot_eke_spatial.py"]
 }
+"""
 
 def run_step(name):
     """执行单个脚本并记录耗时"""

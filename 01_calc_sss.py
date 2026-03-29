@@ -21,8 +21,10 @@ def init_worker():
         lat, lon = ds['lat'].values, ds['lon'].values
         
     ln2, lt2 = np.meshgrid(lon, lat)
+    
+    # 🎯 修复：统一使用 v['lat'][1] 且为 <=
     masks = {k: (ln2 >= v['lon'][0]) & (ln2 <= v['lon'][1]) & \
-                (lt2 >= v['lat'][0]) & (lt2 >= v['lat'][2]) for k, v in REGIONS.items()}
+                (lt2 >= v['lat'][0]) & (lt2 <= v['lat'][1]) for k, v in REGIONS.items()}
     global_grid = {'weight': np.cos(np.radians(lt2)), 'masks': masks}
 
 def process_single_case(case_dir):
@@ -72,13 +74,11 @@ def main():
     final_res = []
     total = len(target_cases)
     with mp.Pool(CPU_NUM, initializer=init_worker) as pool:
-        # 🎯 纯净版进度条
         for i, res in enumerate(pool.imap_unordered(process_single_case, target_cases)):
             if res: final_res.extend(res)
             if (i + 1) % max(int(total / 10), 1) == 0 or (i + 1) == total:
                 print(f"    -> SSS 进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)", flush=True)
 
-    # 🎯 防崩溃保护
     if not final_res: return
 
     df = pd.DataFrame(final_res).sort_values(by=['case_date', 'forecast_day'])
