@@ -21,22 +21,22 @@ os.makedirs(PLOT_OUT_DIR, exist_ok=True)
 REGIONS = {
     'SCS': {
         'name': 'South China Sea', 'short_name': 'SCS',
-        'lon': [105, 121, 121, 105, 105], 'lat': [3, 3, 23, 23, 3],
+        'lon': [105, 121], 'lat': [3, 23],
         'color': 'red', 'linestyle': '-'
     },
     'Kuro': {
         'name': 'Kuroshio Main Stream', 'short_name': 'Kuro',
-        'lon': [120, 140, 140, 120, 120], 'lat': [18, 18, 35, 35, 18],
+        'lon': [120, 140], 'lat': [18, 35],
         'color': 'blue', 'linestyle': '-'
     },
     'KE': {
         'name': 'Kuroshio Extension', 'short_name': 'KE',
-        'lon': [140, 165, 165, 140, 140], 'lat': [30, 30, 40, 40, 30],
+        'lon': [140, 165], 'lat': [30, 40],
         'color': 'darkorange', 'linestyle': '-'
     },
     'WPac': {
         'name': 'Western Pacific', 'short_name': 'WPac',
-        'lon': [120, 180, 180, 120, 120], 'lat': [0, 0, 50, 50, 0],
+        'lon': [120, 180], 'lat': [0, 50],
         'color': 'purple', 'linestyle': '--'
     }
 }

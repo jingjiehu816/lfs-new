@@ -1,12 +1,12 @@
-# /data03/hjj/hjj/LFS-new/newwork/region/03_plot_eke_lead_time.py
+# /data03/hjj/hjj/LFS-new/newwork/region/03_plot_sss_lead_time.py
 import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from config_regions import REGIONS, DATA_OUT_DIR, PLOT_OUT_DIR
 import warnings
 warnings.filterwarnings('ignore')
 
-VAR_NAME = 'EKE'
-INPUT_CSV = os.path.join(DATA_OUT_DIR, f'EKE_Evaluation_20230101-20241231.csv')
+VAR_NAME = 'SSS'
+INPUT_CSV = os.path.join(DATA_OUT_DIR, f'SSS_Evaluation_20230101-20241231.csv')
 
 def calc_bxp(arr):
     arr = arr.dropna().values
@@ -55,8 +55,8 @@ def draw_reg_panel(ax_top, ax_bot, stats, r_k, title, is_left=False):
     ax_top.set_title(title, weight='bold', size=14)
     ax_top.axhline(0, color='k', ls='--', alpha=0.5)
     if is_left:
-        ax_top.set_ylabel('Bias & RMSE (cm²/s²)', weight='bold')
-        ax_bot.set_ylabel('MAE (cm²/s²)', weight='bold')
+        ax_top.set_ylabel('Bias & RMSE (PSU)', weight='bold')
+        ax_bot.set_ylabel('MAE (PSU)', weight='bold')
 
 def main():
     stats = get_stats()

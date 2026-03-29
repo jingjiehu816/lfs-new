@@ -36,10 +36,12 @@ def process_single_case(case_dir):
         case_date = datetime.strptime(os.path.basename(case_dir).split('_')[1], '%Y%m%d')
     except: return None
 
+    # 🎯 全新标准四季划分
     month = case_date.month
-    if month in [6, 7]: season = 'Summer'
-    elif month in [12, 1]: season = 'Winter'
-    else: return None
+    if month in [3, 4, 5]: season = 'Spring'
+    elif month in [6, 7, 8]: season = 'Summer'
+    elif month in [9, 10, 11]: season = 'Autumn'
+    else: season = 'Winter' # 12, 1, 2
 
     results_1d = []
     grid_shape = global_grid['shape']
@@ -78,15 +80,16 @@ def process_single_case(case_dir):
             sum_mod[m_val]  += mod_eke[m_val]
             valid_cnt[m_val] += 1
 
+            # 🎯 写入带 forecast_day 的记录，匹配 03 趋势图脚本的需求
             rec = {'season': season, 'case_date': case_date.strftime('%Y%m%d'), 'forecast_day': day_idx}
             for reg_name, reg_mask in global_grid['masks'].items():
                 m = m_val & reg_mask
                 if np.sum(m) > 0:
                     rec[f'{reg_name}_obs_eke'] = np.nanmean(obs_eke[m])
                     rec[f'{reg_name}_mod_eke'] = np.nanmean(mod_eke[m])
-                    rec[f'{reg_name}_bias']    = np.nanmean(bias_2d[m])
-                    rec[f'{reg_name}_rmse']    = np.sqrt(np.nanmean(bias_2d[m]**2))
-                    rec[f'{reg_name}_mae']     = np.nanmean(np.abs(bias_2d[m]))
+                    rec[f'{reg_name}_Bias']    = np.nanmean(bias_2d[m]) # 首字母大写统一
+                    rec[f'{reg_name}_RMSE']    = np.sqrt(np.nanmean(bias_2d[m]**2))
+                    rec[f'{reg_name}_MAE']     = np.nanmean(np.abs(bias_2d[m]))
                 else:
                     rec[f'{reg_name}_obs_eke'] = np.nan
             results_1d.append(rec)
@@ -113,7 +116,6 @@ def main():
     clim_dict = {'u': ds_clim['u'].values, 'v': ds_clim['v'].values}
     grid_dict = {
         'lon': lon_arr, 'lat': lat_arr, 'shape': (len(lat_arr), len(lon_arr)),
-        # 🎯 适配新区域
         'masks': {v['short_name']: get_region_mask(lon_2d, lat_2d, v) for k, v in REGIONS.items()}
     }
     ds_clim.close()
@@ -126,19 +128,25 @@ def main():
     final_1d = []
     total = len(target_cases)
     with mp.Pool(CPU_NUM, initializer=init_worker, initargs=(clim_dict, grid_dict)) as pool:
-        # 🎯 纯净版进度条
         for i, res in enumerate(pool.imap_unordered(process_single_case, target_cases)):
             if res: final_1d.extend(res)
             if (i + 1) % max(int(total / 10), 1) == 0 or (i + 1) == total:
                 print(f"    -> EKE 进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)", flush=True)
 
     df = pd.DataFrame(final_1d).dropna(subset=['case_date'])
-    for season in ['Summer', 'Winter']:
+    
+    # 🎯 核心修复 1：输出总表供 03 趋势脚本画图用
+    df.to_csv(os.path.join(DATA_OUT_DIR, 'EKE_Evaluation_20230101-20241231.csv'), index=False)
+
+    # 🎯 核心修复 2：输出 4 个季节的 CSV 供 02 表格脚本画表用
+    seasons = ['Spring', 'Summer', 'Autumn', 'Winter']
+    for season in seasons:
         df_season = df[df['season'] == season]
         if not df_season.empty:
             df_season.to_csv(os.path.join(DATA_OUT_DIR, f'EKE_TimeSeries_{season}.csv'), index=False)
 
-    for season in ['Summer', 'Winter']:
+    # 🎯 核心修复 3：合成 4 个季节的空间场 NC 供 04 空间图脚本画图用
+    for season in seasons:
         nc_files = glob.glob(os.path.join(TMP_NC_PATH, f"eke_2d_*_{season}.nc"))
         if not nc_files: continue
         ds_all = xr.open_mfdataset(nc_files, combine='nested', concat_dim='case')

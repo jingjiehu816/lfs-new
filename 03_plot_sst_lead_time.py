@@ -22,7 +22,6 @@ def get_stats():
         df_d = df[df['forecast_day'] == d]
         res = {}
         for r_k in REGIONS.keys():
-            # 🎯 匹配 SST 脚本中的大写后缀
             for m in ['Bias', 'RMSE', 'MAE']: 
                 res[f'{r_k}_{m}'] = calc_bxp(df_d[f'{r_k}_{m}'])
         all_s.append(res)
@@ -43,11 +42,17 @@ def draw_reg_panel(ax_top, ax_bot, stats, r_k, title, is_left=False):
     ax_bot.bxp(m_box, positions=np.arange(1,31)+0.2, patch_artist=True, showfliers=False, widths=0.4,
                boxprops={'facecolor':'moccasin'}, medianprops={'color':'darkorange'})
     
-    for ax in [ax_top, ax_bot]:
+    for ax_idx, ax in enumerate([ax_top, ax_bot]):
         ax.set_xlim(0, 32); ax.set_xticks([1.2, 7.2, 15.2, 30.2])
-        ax.set_xticklabels(['1', '7', '15', '30'], weight='bold')
         ax.grid(axis='y', ls=':', alpha=0.5)
-    
+        
+        # 隐藏上部图表的横坐标文本和刻度线
+        if ax_idx == 0:
+            ax.set_xticklabels([])
+            ax.tick_params(axis='x', length=0)
+        else:
+            ax.set_xticklabels(['1', '7', '15', '30'], weight='bold')
+            
     ax_top.set_title(title, weight='bold', size=14)
     ax_top.axhline(0, color='k', ls='--', alpha=0.5)
     if is_left:
@@ -57,16 +62,20 @@ def draw_reg_panel(ax_top, ax_bot, stats, r_k, title, is_left=False):
 def main():
     stats = get_stats()
     fig = plt.figure(figsize=(20, 12))
-    gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.15)
+    
+    # 缩小 4 个大区域之间的间距
+    gs = fig.add_gridspec(2, 2, hspace=0.15, wspace=0.15)
+    
     for idx, (r_k, r_i) in enumerate(REGIONS.items()):
-        inner_gs = gs[idx // 2, idx % 2].subgridspec(2, 1, hspace=0.1)
+        # 缩小同一个区域内上下两张图的间距
+        inner_gs = gs[idx // 2, idx % 2].subgridspec(2, 1, hspace=0.05)
         ax_t, ax_b = fig.add_subplot(inner_gs[0]), fig.add_subplot(inner_gs[1])
         draw_reg_panel(ax_t, ax_b, stats, r_k, r_i['name'], is_left=(idx%2==0))
     
     leg = [Line2D([0],[0], color='red', marker='s', markerfacecolor='lightblue', label='Bias'),
            Line2D([0],[0], color='black', marker='s', markerfacecolor='lightgreen', label='RMSE'),
            Line2D([0],[0], color='darkorange', marker='s', markerfacecolor='moccasin', label='MAE')]
-    fig.legend(handles=leg, loc='upper center', bbox_to_anchor=(0.5, 0.96), ncol=3, fontsize=12)
+    fig.legend(handles=leg, loc='upper center', bbox_to_anchor=(0.5, 0.94), ncol=3, fontsize=12)
     plt.savefig(os.path.join(PLOT_OUT_DIR, f'Boxplot_{VAR_NAME}_LeadTime.png'), dpi=300, bbox_inches='tight')
 
 if __name__ == '__main__': main()

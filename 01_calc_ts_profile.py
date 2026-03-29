@@ -2,8 +2,6 @@
 import os, glob, re, warnings
 import numpy as np, pandas as pd, xarray as xr
 import multiprocessing as mp
-
-# 🎯 导入配置中心
 from config_regions import CPU_NUM, DATA_OUT_DIR, REGIONS 
 
 warnings.filterwarnings('ignore')
@@ -77,7 +75,8 @@ def process_single_nc(nc_file):
                         prof_rmse_sq[valid_obs] = np.sum((v_dif**2) * v_w_z, axis=1) / v_sum_w
                         prof_mae[valid_obs] = np.sum(np.abs(v_dif) * v_w_z, axis=1) / v_sum_w 
                     
-                    valid_h = ~np.isnan(prof_bias)
+                    # 🎯 修复：加入 ~np.isnan(sub_awgt) 过滤陆地空值！
+                    valid_h = ~np.isnan(prof_bias) & ~np.isnan(sub_awgt) & (sub_awgt > 0)
                     if np.sum(valid_h) > 0:
                         w_h = sub_awgt[valid_h]
                         total_w_h = np.sum(w_h)
@@ -102,17 +101,15 @@ def main():
         
     final_results = []
     with mp.Pool(CPU_NUM) as pool:
-        # 🎯 纯净版进度条 (按块返回结果)
         for i, res in enumerate(pool.imap_unordered(process_single_nc, all_nc_files, chunksize=10)):
             if res: final_results.append(res)
             if (i + 1) % max(int(total / 10), 1) == 0 or (i + 1) == total:
                 print(f"    -> TS Profile 进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)", flush=True)
 
-    # 🎯 防崩溃保护
     if not final_results: return
 
     df = pd.DataFrame(final_results).sort_values(by=['case_date', 'forecast_day'])
-    csv_out = os.path.join(DATA_OUT_DIR, 'TS_Profile_Regions_Stats.csv')
+    csv_out = os.path.join(DATA_OUT_DIR, 'TS_Profile_Evaluation_20230101-20241231.csv') # 统一命名格式
     df.to_csv(csv_out, index=False)
 
 if __name__ == "__main__":
